@@ -48,7 +48,7 @@ export default function ShiftCtrlApp({ userEmail }) {
   const [editSite, setEditSite] = useState(null);
   const [errMsg, setErrMsg] = useState("");
 
-  const flash = (msg) => { setErrMsg(msg); setTimeout(() => setErrMsg(""), 4000); };
+  const flash = (msg) => { setErrMsg(msg); setTimeout(() => setErrMsg(""), 12000); };
 
   useEffect(() => {
     (async () => {
@@ -60,7 +60,7 @@ export default function ShiftCtrlApp({ userEmail }) {
       if (!e1 && sitesData) setSites(sitesData);
       if (!e2 && shiftsData) setShifts(shiftsData);
       if (!e3 && ratesData) setRates(ratesData);
-      if (e1 || e2 || e3) flash("Erreur de chargement — vérifie ta connexion");
+      if (e1 || e2 || e3) flash("Erreur de chargement: " + (e1?.message || e2?.message || e3?.message || "inconnue"));
       setLoading(false);
     })();
   }, [supabase]);
@@ -118,7 +118,7 @@ export default function ShiftCtrlApp({ userEmail }) {
       site_id: site.id, type, transport, status: "prevu",
     };
     const { data, error } = await supabase.from("shifts").insert(payload).select().single();
-    if (error) { flash("Échec de l'ajout du shift"); return; }
+    if (error) { flash("Échec ajout shift: " + error.message); return; }
     setShifts(prev => [...prev, data]);
     setQuickAddDate(null);
   }
@@ -130,11 +130,11 @@ export default function ShiftCtrlApp({ userEmail }) {
     };
     if (editShift) {
       const { data, error } = await supabase.from("shifts").update(payload).eq("id", editShift.id).select().single();
-      if (error) { flash("Échec de la sauvegarde"); return; }
+      if (error) { flash("Échec sauvegarde: " + error.message); return; }
       setShifts(prev => prev.map(s => s.id === editShift.id ? data : s));
     } else {
       const { data, error } = await supabase.from("shifts").insert(payload).select().single();
-      if (error) { flash("Échec de la sauvegarde"); return; }
+      if (error) { flash("Échec sauvegarde: " + error.message); return; }
       setShifts(prev => [...prev, data]);
     }
     closeModal();
@@ -142,7 +142,7 @@ export default function ShiftCtrlApp({ userEmail }) {
 
   async function deleteShift(id) {
     const { error } = await supabase.from("shifts").delete().eq("id", id);
-    if (error) { flash("Échec de la suppression"); return; }
+    if (error) { flash("Échec suppression: " + error.message); return; }
     setShifts(prev => prev.filter(s => s.id !== id));
     closeModal();
   }
@@ -156,11 +156,11 @@ export default function ShiftCtrlApp({ userEmail }) {
     };
     if (editSite) {
       const { data, error } = await supabase.from("sites").update(payload).eq("id", editSite.id).select().single();
-      if (error) { flash("Échec de la sauvegarde du client"); return; }
+      if (error) { flash("Échec sauvegarde client: " + error.message); return; }
       setSites(prev => prev.map(s => s.id === editSite.id ? data : s));
     } else {
       const { data, error } = await supabase.from("sites").insert(payload).select().single();
-      if (error) { flash("Échec de la création du client"); return; }
+      if (error) { flash("Échec création client: " + error.message); return; }
       setSites(prev => [...prev, data]);
     }
     setSiteFormOpen(false); setEditSite(null);
@@ -168,7 +168,7 @@ export default function ShiftCtrlApp({ userEmail }) {
 
   async function deleteSite(id) {
     const { error } = await supabase.from("sites").delete().eq("id", id);
-    if (error) { flash("Échec de la suppression"); return; }
+    if (error) { flash("Échec suppression: " + error.message); return; }
     setSites(prev => prev.filter(s => s.id !== id));
   }
 
@@ -178,7 +178,7 @@ export default function ShiftCtrlApp({ userEmail }) {
     const uid = userData?.user?.id;
     const payload = { user_id: uid, taux_jour: next.jour, taux_nuit: next.nuit, prime: next.prime };
     const { data, error } = await supabase.from("rates").upsert(payload).select().single();
-    if (error) { flash("Échec de la sauvegarde des taux"); return; }
+    if (error) { flash("Échec sauvegarde taux: " + error.message); return; }
     setRates(data);
   }
 
@@ -236,7 +236,7 @@ export default function ShiftCtrlApp({ userEmail }) {
       )}
 
       {errMsg && (
-        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 text-sm px-4 py-2.5 rounded display tracking-wide z-50" style={{ background: C.elevated, border: `1px solid ${C.red}`, color: C.text }}>
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 text-sm px-4 py-2.5 rounded display tracking-wide z-50 text-center" style={{ background: C.elevated, border: `1px solid ${C.red}`, color: C.text, maxWidth: "90vw" }}>
           {errMsg}
         </div>
       )}
