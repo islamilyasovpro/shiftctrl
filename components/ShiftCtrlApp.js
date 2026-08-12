@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useEffect, useMemo, useCallback } from "react";
-import { Shield, Plus, X, Calendar, Wallet, MapPin, Settings, ChevronLeft, ChevronRight, Car, Users, Ban, Trash2, Check, Pencil, LogOut } from "lucide-react";
+import { Shield, Plus, X, Calendar, Wallet, MapPin, Settings, ChevronLeft, ChevronRight, Car, Users, Ban, Trash2, Check, Pencil, LogOut, StickyNote } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
 const MONTHS = ["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"];
@@ -39,6 +39,7 @@ export default function ShiftCtrlApp({ userEmail }) {
   const [tab, setTab] = useState("calendrier");
   const [sites, setSites] = useState([]);
   const [shifts, setShifts] = useState([]);
+  const [notes, setNotes] = useState([]);
   const [rates, setRates] = useState({ taux_jour: 14, taux_nuit: 17, prime: 19 });
   const [cursor, setCursor] = useState(() => { const d = new Date(); d.setDate(1); return d; });
   const [quickAddDate, setQuickAddDate] = useState(null);
@@ -46,6 +47,8 @@ export default function ShiftCtrlApp({ userEmail }) {
   const [editShift, setEditShift] = useState(null);
   const [siteFormOpen, setSiteFormOpen] = useState(false);
   const [editSite, setEditSite] = useState(null);
+  const [noteModalDate, setNoteModalDate] = useState(null);
+  const [editNote, setEditNote] = useState(null);
   const [errMsg, setErrMsg] = useState("");
   const [okMsg, setOkMsg] = useState("");
   const [userId, setUserId] = useState(null);
@@ -55,16 +58,18 @@ export default function ShiftCtrlApp({ userEmail }) {
 
   useEffect(() => {
     (async () => {
-      const [{ data: sitesData, error: e1 }, { data: shiftsData, error: e2 }, { data: ratesData, error: e3 }, { data: userData }] = await Promise.all([
+      const [{ data: sitesData, error: e1 }, { data: shiftsData, error: e2 }, { data: ratesData, error: e3 }, { data: userData }, { data: notesData, error: e4 }] = await Promise.all([
         supabase.from("sites").select("*").order("name"),
         supabase.from("shifts").select("*"),
         supabase.from("rates").select("*").maybeSingle(),
         supabase.auth.getUser(),
+        supabase.from("notes").select("*"),
       ]);
       if (!e1 && sitesData) setSites(sitesData);
       if (!e2 && shiftsData) setShifts(shiftsData);
       if (!e3 && ratesData) setRates(ratesData);
       if (userData?.user?.id) setUserId(userData.user.id);
+      if (!e4 && notesData) setNotes(notesData);
       if (e1 || e2 || e3) flash("Erreur de chargement: " + (e1?.message || e2?.message || e3?.message || "inconnue"));
       setLoading(false);
     })();
@@ -75,6 +80,12 @@ export default function ShiftCtrlApp({ userEmail }) {
     for (const s of shifts) (map[s.date] ||= []).push(s);
     return map;
   }, [shifts]);
+
+  const notesByDay = useMemo(() => {
+    const map = {};
+    for (const n of notes) (map[n.date] ||= []).push(n);
+    return map;
+  }, [notes]);
 
   const siteById = useMemo(() => Object.fromEntries(sites.map(s => [s.id, s])), [sites]);
 
@@ -196,6 +207,33 @@ export default function ShiftCtrlApp({ userEmail }) {
     flashOk("Client supprimé");
   }
 
+  // ---- notes CRUD ----
+  function openAddNote(date) { setNoteModalDate(date); setEditNote(null); }
+  function openEditNote(n) { setNoteModalDate(n.date); setEditNote(n); }
+  function closeNoteModal() { setNoteModalDate(null); setEditNote(null); }
+
+  async function upsertNote(text) {
+    if (editNote) {
+      const { data, error } = await supabase.from("notes").update({ text }).eq("id", editNote.id).select().single();
+      if (error) { flash("Échec sauvegarde note: " + error.message); return; }
+      setNotes(prev => prev.map(n => n.id === editNote.id ? data : n));
+    } else {
+      const { data, error } = await supabase.from("notes").insert({ date: noteModalDate, text, user_id: userId }).select().single();
+      if (error) { flash("Échec création note: " + error.message); return; }
+      setNotes(prev => [...prev, data]);
+    }
+    closeNoteModal();
+    flashOk("Note enregistrée");
+  }
+
+  async function deleteNote(id) {
+    const { error } = await supabase.from("notes").delete().eq("id", id);
+    if (error) { flash("Échec suppression note: " + error.message); return; }
+    setNotes(prev => prev.filter(n => n.id !== id));
+    closeNoteModal();
+    flashOk("Note supprimée");
+  }
+
   // ---- rates ----
   async function saveRates(next) {
     const { data: userData } = await supabase.auth.getUser();
@@ -230,7 +268,7 @@ export default function ShiftCtrlApp({ userEmail }) {
 
       <main className="max-w-5xl mx-auto px-4 pb-24 pt-6">
         {tab === "calendrier" && (
-          <CalendarView cursor={cursor} setCursor={setCursor} shiftsByDay={shiftsByDay} siteById={siteById} onDayClick={openDay} onShiftClick={openEditShift} hasSites={sites.length > 0} />
+          <CalendarView cursor={cursor} setCursor={setCursor} shiftsByDay={shiftsByDay} notesByDay={notesByDay} siteById={siteById} onDayClick={openDay} onShiftClick={openEditShift} onNoteClick={openEditNote} hasSites={sites.length > 0} />
         )}
         {tab === "salaire" && (
           <SalaryView cursor={cursor} setCursor={setCursor} summary={monthSummary} monthShifts={monthShifts} siteById={siteById} />
@@ -242,7 +280,14 @@ export default function ShiftCtrlApp({ userEmail }) {
       </main>
 
       {quickAddDate && (
-        <QuickAddSheet date={quickAddDate} sites={sites} onConfirm={(site, type, transport) => quickAdd(site, type, transport, quickAddDate)} onCustom={() => openFullForm(quickAddDate)} onClose={() => setQuickAddDate(null)} />
+        <QuickAddSheet
+          date={quickAddDate}
+          sites={sites}
+          onConfirm={(site, type, transport) => quickAdd(site, type, transport, quickAddDate)}
+          onCustom={() => openFullForm(quickAddDate)}
+          onAddNote={() => { const d = quickAddDate; setQuickAddDate(null); openAddNote(d); }}
+          onClose={() => setQuickAddDate(null)}
+        />
       )}
 
       {modalDate && (
@@ -258,6 +303,16 @@ export default function ShiftCtrlApp({ userEmail }) {
         <SiteModal
           site={editSite ? { name: editSite.name, indemnite: editSite.indemnite, dayStart: toHHMM(editSite.day_start), dayEnd: toHHMM(editSite.day_end), nightStart: toHHMM(editSite.night_start), nightEnd: toHHMM(editSite.night_end), specialEnabled: !!editSite.special_rate_enabled, specialRate: editSite.special_rate ?? "" } : null}
           onClose={() => { setSiteFormOpen(false); setEditSite(null); }} onSave={upsertSite}
+        />
+      )}
+
+      {noteModalDate && (
+        <NoteModal
+          date={noteModalDate}
+          note={editNote}
+          onClose={closeNoteModal}
+          onSave={upsertNote}
+          onDelete={editNote ? () => deleteNote(editNote.id) : null}
         />
       )}
 
@@ -324,14 +379,15 @@ function MonthNav({ cursor, setCursor }) {
   );
 }
 
-const WEEKDAY_SHORT = ["DIM", "LUN", "MAR", "MER", "JEU", "VEN", "SAM"];
-
-function CalendarView({ cursor, setCursor, shiftsByDay, siteById, onDayClick, onShiftClick, hasSites }) {
+function CalendarView({ cursor, setCursor, shiftsByDay, notesByDay, siteById, onDayClick, onShiftClick, onNoteClick, hasSites }) {
   const y = cursor.getFullYear(), m = cursor.getMonth();
+  const first = new Date(y, m, 1);
+  const startOffset = (first.getDay() + 6) % 7;
   const daysInMonth = new Date(y, m + 1, 0).getDate();
   const today = dateKey(new Date());
-  const days = [];
-  for (let d = 1; d <= daysInMonth; d++) days.push(d);
+  const cells = [];
+  for (let i = 0; i < startOffset; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
 
   return (
     <div>
@@ -346,21 +402,27 @@ function CalendarView({ cursor, setCursor, shiftsByDay, siteById, onDayClick, on
         <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full inline-block" style={{ background: C.red }} /> Nuit</span>
         <span className="flex items-center gap-1.5"><Car className="w-3.5 h-3.5" /> Conducteur</span>
         <span className="flex items-center gap-1.5"><Users className="w-3.5 h-3.5" /> Passager</span>
+        <span className="flex items-center gap-1.5"><StickyNote className="w-3.5 h-3.5" /> Note</span>
       </div>
-
-      <div className="flex flex-col rounded-lg overflow-hidden" style={{ border: `1px solid ${C.borderSoft}` }}>
-        {days.map(d => {
+      <div className="grid grid-cols-7 gap-1 mb-1">
+        {DAYS.map((d, i) => <div key={i} className="text-center text-[10px] uppercase tracking-widest py-1" style={{ color: C.textDim }}>{d}</div>)}
+      </div>
+      <div className="grid grid-cols-7 gap-1">
+        {cells.map((d, i) => {
+          if (d === null) return <div key={i} />;
           const key = `${y}-${pad(m+1)}-${pad(d)}`;
           const dayShifts = shiftsByDay[key] || [];
+          const dayNotes = notesByDay[key] || [];
           const isToday = key === today;
-          const weekday = WEEKDAY_SHORT[new Date(y, m, d).getDay()];
           return (
-            <div key={d} className="flex items-stretch gap-3 px-3 py-2.5" style={{ background: isToday ? C.redDim : C.panel, borderBottom: `1px solid ${C.borderSoft}` }}>
-              <div className="flex flex-col items-center justify-center flex-shrink-0" style={{ width: "38px" }}>
-                <span className="mono text-base font-semibold leading-none" style={{ color: isToday ? C.red : C.text }}>{d}</span>
-                <span className="text-[9px] uppercase tracking-wider mt-0.5" style={{ color: C.textDim }}>{weekday}</span>
+            <div key={i} className="rounded p-1 flex flex-col gap-0.5" style={{ background: C.panel, border: isToday ? `1.5px solid ${C.red}` : `1px solid ${C.borderSoft}`, minHeight: "64px" }}>
+              <div className="flex items-center justify-between">
+                <span className="mono text-[10px]" style={{ color: isToday ? C.red : C.textMid }}>{d}</span>
+                <button onClick={() => onDayClick(key)} className="focusable rounded" style={{ color: C.textDim }} title="Ajouter">
+                  <Plus className="w-3 h-3" />
+                </button>
               </div>
-              <div className="flex-1 flex flex-wrap gap-1.5 items-center min-w-0 py-0.5">
+              <div className="flex flex-col gap-0.5">
                 {dayShifts.map(s => {
                   const site = siteById[s.site_id];
                   const TransportIcon = s.transport === "conducteur" ? Car : s.transport === "passager" ? Users : null;
@@ -368,30 +430,34 @@ function CalendarView({ cursor, setCursor, shiftsByDay, siteById, onDayClick, on
                     <button
                       key={s.id}
                       onClick={() => onShiftClick(s)}
-                      className="focusable flex items-center gap-1.5 px-2.5 py-1.5 rounded-full"
+                      className="focusable w-full text-left px-1 py-0.5 rounded flex items-center gap-0.5 min-w-0"
                       style={{
                         background: s.type === "nuit" ? C.redDim : C.amberDim,
-                        border: `1px solid ${s.type === "nuit" ? C.red : C.amber}`,
                         opacity: s.status === "annule" ? 0.45 : s.status === "prevu" ? 0.8 : 1,
                       }}
                     >
-                      {TransportIcon && <TransportIcon className="w-3 h-3 flex-shrink-0" style={{ color: C.textDim }} />}
-                      <span className="text-[13px] font-medium" style={{ color: C.text, textDecoration: s.status === "annule" ? "line-through" : "none" }}>
-                        {site ? site.name : "Personnalisé"}
+                      {TransportIcon && <TransportIcon className="w-2 h-2 flex-shrink-0" style={{ color: C.textDim }} />}
+                      <span className="text-[9.5px] leading-tight truncate" style={{ color: C.text, textDecoration: s.status === "annule" ? "line-through" : "none" }}>
+                        {site ? site.name : "Perso"}
                       </span>
-                      <span className="mono text-[11px]" style={{ color: C.textDim }}>{toHHMM(s.start_time)}</span>
                     </button>
                   );
                 })}
-                <button onClick={() => onDayClick(key)} className="focusable flex items-center justify-center rounded-full flex-shrink-0" style={{ width: "26px", height: "26px", border: `1px dashed ${C.border}`, color: C.textDim }} title="Ajouter un shift">
-                  <Plus className="w-3.5 h-3.5" />
-                </button>
+                {dayNotes.map(n => (
+                  <button
+                    key={n.id}
+                    onClick={() => onNoteClick(n)}
+                    className="focusable w-full text-left px-1 py-0.5 rounded truncate"
+                    style={{ background: C.elevated, border: `1px solid ${C.border}` }}
+                  >
+                    <span className="text-[9.5px] leading-tight truncate" style={{ color: C.textMid }}>{n.text}</span>
+                  </button>
+                ))}
               </div>
             </div>
           );
         })}
       </div>
-
       <div className="mt-4 text-[11px] flex items-center gap-4 uppercase tracking-widest flex-wrap" style={{ color: C.textDim }}>
         <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full inline-block" style={{ background: C.textMid }} /> Presté = plein</span>
         <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full inline-block" style={{ background: C.textMid, opacity: 0.8 }} /> Prévu</span>
@@ -401,7 +467,7 @@ function CalendarView({ cursor, setCursor, shiftsByDay, siteById, onDayClick, on
   );
 }
 
-function QuickAddSheet({ date, sites, onConfirm, onCustom, onClose }) {
+function QuickAddSheet({ date, sites, onConfirm, onCustom, onAddNote, onClose }) {
   const d = new Date(date + "T00:00:00");
   const [selectedSite, setSelectedSite] = useState(null);
   const [type, setType] = useState("jour");
@@ -435,6 +501,9 @@ function QuickAddSheet({ date, sites, onConfirm, onCustom, onClose }) {
               ))}
             </div>
             <button onClick={onCustom} className="focusable w-full mt-3 py-3 rounded-lg display text-[13px] uppercase tracking-wider" style={{ background: "transparent", border: `1px dashed ${C.border}`, color: C.textMid }}>Shift personnalisé</button>
+            <button onClick={onAddNote} className="focusable w-full mt-2 py-3 rounded-lg display text-[13px] uppercase tracking-wider flex items-center justify-center gap-2" style={{ background: "transparent", border: `1px dashed ${C.border}`, color: C.textMid }}>
+              <StickyNote className="w-3.5 h-3.5" /> Ajouter une note
+            </button>
           </>
         )}
 
@@ -618,6 +687,32 @@ function SiteModal({ site, onClose, onSave }) {
           </div>
         </div>
         <button type="submit" className="focusable w-full mt-5 py-3.5 rounded-lg display text-[13px] uppercase tracking-wider font-medium" style={{ background: C.red, color: "#FFFFFF" }}>Enregistrer</button>
+      </form>
+    </div>
+  );
+}
+
+function NoteModal({ date, note, onClose, onSave, onDelete }) {
+  const [text, setText] = useState(note?.text || "");
+  function submit(e) { e.preventDefault(); if (!text.trim()) return; onSave(text.trim()); }
+  const d = new Date((note?.date || date) + "T00:00:00");
+  return (
+    <div className="fixed inset-0 z-40 flex items-end sm:items-center justify-center" style={{ background: "rgba(0,0,0,0.65)" }} onClick={onClose}>
+      <form onSubmit={submit} onClick={e => e.stopPropagation()} className="w-full sm:max-w-sm rounded-t-xl sm:rounded-lg p-5" style={{ background: C.panelAlt, border: `1px solid ${C.borderSoft}` }}>
+        <div className="flex items-center justify-between mb-4">
+          <div className="display text-sm uppercase tracking-wider flex items-center gap-2">
+            <StickyNote className="w-4 h-4" style={{ color: C.red }} />
+            {d.getDate()} {MONTHS[d.getMonth()]}
+          </div>
+          <button type="button" onClick={onClose} className="focusable" style={{ color: C.textDim }}><X className="w-5 h-5" /></button>
+        </div>
+        <Field label="Note">
+          <textarea autoFocus required value={text} onChange={e => setText(e.target.value)} rows={3} placeholder="Ex: Dentiste 14h, RDV urologue…" className="w-full rounded-lg px-3.5 py-3 text-[15px] resize-none" style={{ background: C.bg, border: `1px solid ${C.border}`, color: C.text }} />
+        </Field>
+        <div className="flex gap-2.5 mt-4">
+          <button type="submit" className="focusable flex-1 py-3.5 rounded-lg display text-[13px] uppercase tracking-wider font-medium flex items-center justify-center gap-1.5" style={{ background: C.red, color: "#FFFFFF" }}><Check className="w-4 h-4" /> Enregistrer</button>
+          {onDelete && <button type="button" onClick={onDelete} className="focusable px-4 py-3.5 rounded-lg" style={{ color: C.red, border: `1px solid ${C.red}` }}><Trash2 className="w-4 h-4" /></button>}
+        </div>
       </form>
     </div>
   );
