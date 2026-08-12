@@ -297,14 +297,15 @@ function Header({ tab, setTab, userEmail, onLogout }) {
           <LogOut className="w-4 h-4" />
         </button>
       </div>
-      <nav className="max-w-5xl mx-auto px-4 flex gap-1 overflow-x-auto">
+      <nav className="max-w-5xl mx-auto px-2 grid grid-cols-4">
         {items.map(it => {
           const Icon = it.icon;
           const active = tab === it.id;
           return (
-            <button key={it.id} onClick={() => setTab(it.id)} className="focusable display flex items-center gap-2 px-3.5 py-3 text-[13px] uppercase tracking-wider whitespace-nowrap border-b-2 transition-colors"
+            <button key={it.id} onClick={() => setTab(it.id)} className="focusable display flex flex-col items-center justify-center gap-1 py-2.5 border-b-2 transition-colors min-w-0"
               style={{ borderColor: active ? C.red : "transparent", color: active ? C.text : C.textDim, fontWeight: active ? 600 : 500 }}>
-              <Icon className="w-4 h-4" /> {it.label}
+              <Icon className="w-4 h-4 flex-shrink-0" />
+              <span className="text-[10px] uppercase tracking-wide truncate max-w-full px-0.5">{it.label}</span>
             </button>
           );
         })}
@@ -323,15 +324,14 @@ function MonthNav({ cursor, setCursor }) {
   );
 }
 
+const WEEKDAY_SHORT = ["DIM", "LUN", "MAR", "MER", "JEU", "VEN", "SAM"];
+
 function CalendarView({ cursor, setCursor, shiftsByDay, siteById, onDayClick, onShiftClick, hasSites }) {
   const y = cursor.getFullYear(), m = cursor.getMonth();
-  const first = new Date(y, m, 1);
-  const startOffset = (first.getDay() + 6) % 7;
   const daysInMonth = new Date(y, m + 1, 0).getDate();
   const today = dateKey(new Date());
-  const cells = [];
-  for (let i = 0; i < startOffset; i++) cells.push(null);
-  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+  const days = [];
+  for (let d = 1; d <= daysInMonth; d++) days.push(d);
 
   return (
     <div>
@@ -347,55 +347,55 @@ function CalendarView({ cursor, setCursor, shiftsByDay, siteById, onDayClick, on
         <span className="flex items-center gap-1.5"><Car className="w-3.5 h-3.5" /> Conducteur</span>
         <span className="flex items-center gap-1.5"><Users className="w-3.5 h-3.5" /> Passager</span>
       </div>
-      <div className="grid grid-cols-7 gap-2 mb-1">
-        {DAYS.map((d, i) => <div key={i} className="text-center text-[11px] uppercase tracking-widest py-1" style={{ color: C.textDim }}>{d}</div>)}
-      </div>
-      <div className="grid grid-cols-7 gap-2">
-        {cells.map((d, i) => {
-          if (d === null) return <div key={i} style={{ minHeight: "116px" }} />;
+
+      <div className="flex flex-col rounded-lg overflow-hidden" style={{ border: `1px solid ${C.borderSoft}` }}>
+        {days.map(d => {
           const key = `${y}-${pad(m+1)}-${pad(d)}`;
           const dayShifts = shiftsByDay[key] || [];
           const isToday = key === today;
+          const weekday = WEEKDAY_SHORT[new Date(y, m, d).getDay()];
           return (
-            <div key={i} className="rounded-lg p-2 flex flex-col relative" style={{ background: C.panel, border: isToday ? `1.5px solid ${C.red}` : `1px solid ${C.borderSoft}`, minHeight: "116px" }}>
-              <div className="flex items-center justify-between mb-1.5">
-                <span className="mono text-xs" style={{ color: C.textMid }}>{d}</span>
-                <button onClick={() => onDayClick(key)} className="focusable rounded p-0.5" style={{ color: C.textDim }} title="Ajouter un shift">
-                  <Plus className="w-3.5 h-3.5" />
-                </button>
+            <div key={d} className="flex items-stretch gap-3 px-3 py-2.5" style={{ background: isToday ? C.redDim : C.panel, borderBottom: `1px solid ${C.borderSoft}` }}>
+              <div className="flex flex-col items-center justify-center flex-shrink-0" style={{ width: "38px" }}>
+                <span className="mono text-base font-semibold leading-none" style={{ color: isToday ? C.red : C.text }}>{d}</span>
+                <span className="text-[9px] uppercase tracking-wider mt-0.5" style={{ color: C.textDim }}>{weekday}</span>
               </div>
-              <div className="flex flex-col gap-1 flex-1 min-h-0 overflow-hidden">
-                {dayShifts.slice(0, 4).map(s => {
+              <div className="flex-1 flex flex-wrap gap-1.5 items-center min-w-0 py-0.5">
+                {dayShifts.map(s => {
                   const site = siteById[s.site_id];
                   const TransportIcon = s.transport === "conducteur" ? Car : s.transport === "passager" ? Users : null;
                   return (
                     <button
                       key={s.id}
                       onClick={() => onShiftClick(s)}
-                      className="focusable text-left px-1.5 py-1 rounded flex items-center gap-1 min-w-0"
+                      className="focusable flex items-center gap-1.5 px-2.5 py-1.5 rounded-full"
                       style={{
                         background: s.type === "nuit" ? C.redDim : C.amberDim,
-                        borderLeft: `2.5px solid ${s.type === "nuit" ? C.red : C.amber}`,
-                        opacity: s.status === "annule" ? 0.4 : s.status === "prevu" ? 0.75 : 1,
+                        border: `1px solid ${s.type === "nuit" ? C.red : C.amber}`,
+                        opacity: s.status === "annule" ? 0.45 : s.status === "prevu" ? 0.8 : 1,
                       }}
                     >
-                      {TransportIcon && <TransportIcon className="w-2.5 h-2.5 flex-shrink-0" style={{ color: C.textDim }} />}
-                      <span className="text-[11px] leading-tight truncate" style={{ color: C.text, textDecoration: s.status === "annule" ? "line-through" : "none" }}>
+                      {TransportIcon && <TransportIcon className="w-3 h-3 flex-shrink-0" style={{ color: C.textDim }} />}
+                      <span className="text-[13px] font-medium" style={{ color: C.text, textDecoration: s.status === "annule" ? "line-through" : "none" }}>
                         {site ? site.name : "Personnalisé"}
                       </span>
+                      <span className="mono text-[11px]" style={{ color: C.textDim }}>{toHHMM(s.start_time)}</span>
                     </button>
                   );
                 })}
-                {dayShifts.length > 4 && <span className="text-[10px] px-1.5" style={{ color: C.textDim }}>+{dayShifts.length - 4} autre{dayShifts.length - 4 > 1 ? "s" : ""}</span>}
+                <button onClick={() => onDayClick(key)} className="focusable flex items-center justify-center rounded-full flex-shrink-0" style={{ width: "26px", height: "26px", border: `1px dashed ${C.border}`, color: C.textDim }} title="Ajouter un shift">
+                  <Plus className="w-3.5 h-3.5" />
+                </button>
               </div>
             </div>
           );
         })}
       </div>
+
       <div className="mt-4 text-[11px] flex items-center gap-4 uppercase tracking-widest flex-wrap" style={{ color: C.textDim }}>
         <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full inline-block" style={{ background: C.textMid }} /> Presté = plein</span>
-        <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full inline-block" style={{ background: C.textMid, opacity: 0.75 }} /> Prévu</span>
-        <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full inline-block" style={{ background: C.textMid, opacity: 0.4 }} /> Annulé (barré)</span>
+        <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full inline-block" style={{ background: C.textMid, opacity: 0.8 }} /> Prévu</span>
+        <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full inline-block" style={{ background: C.textMid, opacity: 0.45 }} /> Annulé (barré)</span>
       </div>
     </div>
   );
