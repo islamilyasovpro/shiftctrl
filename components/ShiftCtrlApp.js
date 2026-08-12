@@ -81,11 +81,18 @@ export default function ShiftCtrlApp({ userEmail }) {
   function computeShiftPay(s) {
     const h = hoursBetween(toHHMM(s.start_time), toHHMM(s.end_time));
     const site = siteById[s.site_id];
-    const special = site?.special_rate_enabled && site?.special_rate != null && site?.special_rate !== "";
-    const rate = special ? Number(site.special_rate) : (s.type === "nuit" ? Number(rates.taux_nuit) : Number(rates.taux_jour));
+    let rate, prime, deplacement;
+    if (s.special_enabled) {
+      rate = Number(s.special_rate) || 0;
+      prime = Number(s.special_prime) || 0;
+      deplacement = Number(s.special_indemnite) || 0;
+    } else {
+      const siteSpecial = site?.special_rate_enabled && site?.special_rate != null && site?.special_rate !== "";
+      rate = siteSpecial ? Number(site.special_rate) : (s.type === "nuit" ? Number(rates.taux_nuit) : Number(rates.taux_jour));
+      prime = Number(rates.prime);
+      deplacement = s.transport === "conducteur" && site ? Number(site.indemnite || 0) : 0;
+    }
     const base = h * rate;
-    const prime = Number(rates.prime);
-    const deplacement = s.transport === "conducteur" && site ? Number(site.indemnite || 0) : 0;
     return { hours: h, base, prime, deplacement, total: base + prime + deplacement };
   }
 
@@ -134,6 +141,10 @@ export default function ShiftCtrlApp({ userEmail }) {
     const payload = {
       date: form.date, start_time: form.start, end_time: form.end,
       site_id: form.siteId || null, type: form.type, transport: form.transport, status: form.status,
+      special_enabled: !!form.specialEnabled,
+      special_rate: form.specialEnabled ? (Number(form.specialRate) || 0) : null,
+      special_prime: form.specialEnabled ? (Number(form.specialPrime) || 0) : null,
+      special_indemnite: form.specialEnabled ? (Number(form.specialIndemnite) || 0) : null,
     };
     if (editShift) {
       const { data, error } = await supabase.from("shifts").update(payload).eq("id", editShift.id).select().single();
@@ -237,7 +248,7 @@ export default function ShiftCtrlApp({ userEmail }) {
       {modalDate && (
         <ShiftModal
           date={modalDate}
-          shift={editShift ? { date: editShift.date, start: toHHMM(editShift.start_time), end: toHHMM(editShift.end_time), siteId: editShift.site_id || "", type: editShift.type, transport: editShift.transport, status: editShift.status } : null}
+          shift={editShift ? { date: editShift.date, start: toHHMM(editShift.start_time), end: toHHMM(editShift.end_time), siteId: editShift.site_id || "", type: editShift.type, transport: editShift.transport, status: editShift.status, specialEnabled: !!editShift.special_enabled, specialRate: editShift.special_rate ?? "", specialPrime: editShift.special_prime ?? "", specialIndemnite: editShift.special_indemnite ?? "" } : null}
           sites={sites} onClose={closeModal} onSave={upsertShift}
           onDelete={editShift ? () => deleteShift(editShift.id) : null}
         />
@@ -286,7 +297,7 @@ function Header({ tab, setTab, userEmail, onLogout }) {
           <LogOut className="w-4 h-4" />
         </button>
       </div>
-      <nav className="max-w-5xl mx-auto px-2 flex gap-1 overflow-x-auto">
+      <nav className="max-w-5xl mx-auto px-4 flex gap-1 overflow-x-auto">
         {items.map(it => {
           const Icon = it.icon;
           const active = tab === it.id;
@@ -330,43 +341,61 @@ function CalendarView({ cursor, setCursor, shiftsByDay, siteById, onDayClick, on
           Ajoute d'abord tes clients dans l'onglet <b>Clients</b> pour pouvoir les placer d'un tap sur le calendrier.
         </div>
       )}
-      <div className="flex items-center gap-4 mb-3 text-xs uppercase tracking-widest" style={{ color: C.textDim }}>
+      <div className="flex items-center gap-4 mb-3 text-xs uppercase tracking-widest flex-wrap" style={{ color: C.textDim }}>
         <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full inline-block" style={{ background: C.amber }} /> Jour</span>
         <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full inline-block" style={{ background: C.red }} /> Nuit</span>
+        <span className="flex items-center gap-1.5"><Car className="w-3.5 h-3.5" /> Conducteur</span>
+        <span className="flex items-center gap-1.5"><Users className="w-3.5 h-3.5" /> Passager</span>
       </div>
-      <div className="grid grid-cols-7 gap-1.5 mb-1">
+      <div className="grid grid-cols-7 gap-2 mb-1">
         {DAYS.map((d, i) => <div key={i} className="text-center text-[11px] uppercase tracking-widest py-1" style={{ color: C.textDim }}>{d}</div>)}
       </div>
-      <div className="grid grid-cols-7 gap-1.5">
+      <div className="grid grid-cols-7 gap-2">
         {cells.map((d, i) => {
-          if (d === null) return <div key={i} className="aspect-square" />;
+          if (d === null) return <div key={i} style={{ minHeight: "116px" }} />;
           const key = `${y}-${pad(m+1)}-${pad(d)}`;
           const dayShifts = shiftsByDay[key] || [];
           const isToday = key === today;
-          const transportIcon = dayShifts.some(s => s.transport === "conducteur") ? Car
-            : dayShifts.some(s => s.transport === "passager") ? Users
-            : null;
           return (
-            <button key={i} onClick={() => dayShifts.length ? onShiftClick(dayShifts[0]) : onDayClick(key)} className="focusable aspect-square rounded p-1.5 flex flex-col text-left relative" style={{ background: C.panel, border: isToday ? `1.5px solid ${C.red}` : `1px solid ${C.borderSoft}`, minHeight: "3rem" }}>
-              <div className="flex items-center justify-between">
-                <span className="mono text-[11px]" style={{ color: C.textMid }}>{d}</span>
-                {transportIcon && React.createElement(transportIcon, { className: "w-3 h-3", style: { color: C.textDim } })}
+            <div key={i} className="rounded-lg p-2 flex flex-col relative" style={{ background: C.panel, border: isToday ? `1.5px solid ${C.red}` : `1px solid ${C.borderSoft}`, minHeight: "116px" }}>
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="mono text-xs" style={{ color: C.textMid }}>{d}</span>
+                <button onClick={() => onDayClick(key)} className="focusable rounded p-0.5" style={{ color: C.textDim }} title="Ajouter un shift">
+                  <Plus className="w-3.5 h-3.5" />
+                </button>
               </div>
-              <div className="flex-1 flex flex-col justify-end gap-1 mt-0.5">
-                {dayShifts.slice(0, 3).map(s => (
-                  <div key={s.id} className="h-1.5 rounded-full" style={{ background: s.type === "nuit" ? C.red : C.amber, opacity: s.status === "annule" ? 0.3 : s.status === "prevu" ? 0.6 : 1 }} />
-                ))}
+              <div className="flex flex-col gap-1 flex-1 min-h-0 overflow-hidden">
+                {dayShifts.slice(0, 4).map(s => {
+                  const site = siteById[s.site_id];
+                  const TransportIcon = s.transport === "conducteur" ? Car : s.transport === "passager" ? Users : null;
+                  return (
+                    <button
+                      key={s.id}
+                      onClick={() => onShiftClick(s)}
+                      className="focusable text-left px-1.5 py-1 rounded flex items-center gap-1 min-w-0"
+                      style={{
+                        background: s.type === "nuit" ? C.redDim : C.amberDim,
+                        borderLeft: `2.5px solid ${s.type === "nuit" ? C.red : C.amber}`,
+                        opacity: s.status === "annule" ? 0.4 : s.status === "prevu" ? 0.75 : 1,
+                      }}
+                    >
+                      {TransportIcon && <TransportIcon className="w-2.5 h-2.5 flex-shrink-0" style={{ color: C.textDim }} />}
+                      <span className="text-[11px] leading-tight truncate" style={{ color: C.text, textDecoration: s.status === "annule" ? "line-through" : "none" }}>
+                        {site ? site.name : "Personnalisé"}
+                      </span>
+                    </button>
+                  );
+                })}
+                {dayShifts.length > 4 && <span className="text-[10px] px-1.5" style={{ color: C.textDim }}>+{dayShifts.length - 4} autre{dayShifts.length - 4 > 1 ? "s" : ""}</span>}
               </div>
-            </button>
+            </div>
           );
         })}
       </div>
       <div className="mt-4 text-[11px] flex items-center gap-4 uppercase tracking-widest flex-wrap" style={{ color: C.textDim }}>
         <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full inline-block" style={{ background: C.textMid }} /> Presté = plein</span>
-        <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full inline-block" style={{ background: C.textMid, opacity: 0.6 }} /> Prévu</span>
-        <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full inline-block" style={{ background: C.textMid, opacity: 0.3 }} /> Annulé</span>
-        <span className="flex items-center gap-1.5"><Car className="w-3 h-3" /> Conducteur</span>
-        <span className="flex items-center gap-1.5"><Users className="w-3 h-3" /> Passager</span>
+        <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full inline-block" style={{ background: C.textMid, opacity: 0.75 }} /> Prévu</span>
+        <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full inline-block" style={{ background: C.textMid, opacity: 0.4 }} /> Annulé (barré)</span>
       </div>
     </div>
   );
@@ -635,7 +664,7 @@ function Field({ label, children }) {
 }
 
 function ShiftModal({ date, shift, sites, onClose, onSave, onDelete }) {
-  const [form, setForm] = useState(() => shift || { date, start: "08:00", end: "16:00", siteId: sites[0]?.id || "", type: "jour", transport: "aucun", status: "prevu" });
+  const [form, setForm] = useState(() => shift || { date, start: "08:00", end: "16:00", siteId: sites[0]?.id || "", type: "jour", transport: "aucun", status: "prevu", specialEnabled: false, specialRate: "", specialPrime: "", specialIndemnite: "" });
   function submit(e) { e.preventDefault(); onSave(form); }
   return (
     <div className="fixed inset-0 z-30 flex items-end sm:items-center justify-center" style={{ background: "rgba(0,0,0,0.65)" }} onClick={onClose}>
@@ -682,6 +711,35 @@ function ShiftModal({ date, shift, sites, onClose, onSave, onDelete }) {
               {Object.entries(STATUS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
             </select>
           </Field>
+
+          <div className="pt-1" style={{ borderTop: `1px solid ${C.borderSoft}` }}>
+            <button
+              type="button"
+              onClick={() => setForm({ ...form, specialEnabled: !form.specialEnabled })}
+              className="focusable w-full mt-3.5 flex items-center justify-between px-3.5 py-3 rounded-lg"
+              style={{ background: form.specialEnabled ? C.redDim : C.bg, border: `1px solid ${form.specialEnabled ? C.red : C.border}` }}
+            >
+              <span className="text-[13px] font-medium flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full inline-block" style={{ background: form.specialEnabled ? C.red : C.textDim }} />
+                Shift spécial
+              </span>
+              <span className="text-[11px] uppercase tracking-wider" style={{ color: form.specialEnabled ? C.red : C.textDim }}>{form.specialEnabled ? "Activé" : "Désactivé"}</span>
+            </button>
+            {form.specialEnabled && (
+              <div className="mt-2.5 flex flex-col gap-2.5">
+                <div className="text-xs" style={{ color: C.textDim }}>Ces valeurs remplacent entièrement les préréglages (taux, prime, indemnité) pour ce shift uniquement.</div>
+                <Field label="Taux horaire (€/h)">
+                  <input type="number" min="0" step="0.1" value={form.specialRate} onChange={e => setForm({ ...form, specialRate: e.target.value })} placeholder="0" className="w-full rounded-lg px-3.5 py-3 text-[15px] mono" style={{ background: C.bg, border: `1px solid ${C.red}`, color: C.text }} />
+                </Field>
+                <Field label="Prime pour ce shift (€)">
+                  <input type="number" min="0" step="0.5" value={form.specialPrime} onChange={e => setForm({ ...form, specialPrime: e.target.value })} placeholder="0" className="w-full rounded-lg px-3.5 py-3 text-[15px] mono" style={{ background: C.bg, border: `1px solid ${C.red}`, color: C.text }} />
+                </Field>
+                <Field label="Indemnité déplacement (€)">
+                  <input type="number" min="0" step="0.5" value={form.specialIndemnite} onChange={e => setForm({ ...form, specialIndemnite: e.target.value })} placeholder="0" className="w-full rounded-lg px-3.5 py-3 text-[15px] mono" style={{ background: C.bg, border: `1px solid ${C.red}`, color: C.text }} />
+                </Field>
+              </div>
+            )}
+          </div>
         </div>
         <div className="flex gap-2.5 mt-5">
           <button type="submit" className="focusable flex-1 py-3.5 rounded-lg display text-[13px] uppercase tracking-wider font-medium flex items-center justify-center gap-1.5" style={{ background: C.red, color: "#FFFFFF" }}><Check className="w-4 h-4" /> Enregistrer</button>
