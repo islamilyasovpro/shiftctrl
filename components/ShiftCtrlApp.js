@@ -47,19 +47,24 @@ export default function ShiftCtrlApp({ userEmail }) {
   const [siteFormOpen, setSiteFormOpen] = useState(false);
   const [editSite, setEditSite] = useState(null);
   const [errMsg, setErrMsg] = useState("");
+  const [okMsg, setOkMsg] = useState("");
+  const [userId, setUserId] = useState(null);
 
   const flash = (msg) => { setErrMsg(msg); setTimeout(() => setErrMsg(""), 12000); };
+  const flashOk = (msg) => { setOkMsg(msg); setTimeout(() => setOkMsg(""), 2200); };
 
   useEffect(() => {
     (async () => {
-      const [{ data: sitesData, error: e1 }, { data: shiftsData, error: e2 }, { data: ratesData, error: e3 }] = await Promise.all([
+      const [{ data: sitesData, error: e1 }, { data: shiftsData, error: e2 }, { data: ratesData, error: e3 }, { data: userData }] = await Promise.all([
         supabase.from("sites").select("*").order("name"),
         supabase.from("shifts").select("*"),
         supabase.from("rates").select("*").maybeSingle(),
+        supabase.auth.getUser(),
       ]);
       if (!e1 && sitesData) setSites(sitesData);
       if (!e2 && shiftsData) setShifts(shiftsData);
       if (!e3 && ratesData) setRates(ratesData);
+      if (userData?.user?.id) setUserId(userData.user.id);
       if (e1 || e2 || e3) flash("Erreur de chargement: " + (e1?.message || e2?.message || e3?.message || "inconnue"));
       setLoading(false);
     })();
@@ -75,10 +80,11 @@ export default function ShiftCtrlApp({ userEmail }) {
 
   function computeShiftPay(s) {
     const h = hoursBetween(toHHMM(s.start_time), toHHMM(s.end_time));
-    const rate = s.type === "nuit" ? Number(rates.taux_nuit) : Number(rates.taux_jour);
+    const site = siteById[s.site_id];
+    const special = site?.special_rate_enabled && site?.special_rate != null && site?.special_rate !== "";
+    const rate = special ? Number(site.special_rate) : (s.type === "nuit" ? Number(rates.taux_nuit) : Number(rates.taux_jour));
     const base = h * rate;
     const prime = Number(rates.prime);
-    const site = siteById[s.site_id];
     const deplacement = s.transport === "conducteur" && site ? Number(site.indemnite || 0) : 0;
     return { hours: h, base, prime, deplacement, total: base + prime + deplacement };
   }
@@ -115,12 +121,13 @@ export default function ShiftCtrlApp({ userEmail }) {
       date,
       start_time: type === "nuit" ? (site.night_start || "22:00") : (site.day_start || "08:00"),
       end_time: type === "nuit" ? (site.night_end || "06:00") : (site.day_end || "16:00"),
-      site_id: site.id, type, transport, status: "prevu",
+      site_id: site.id, type, transport, status: "prevu", user_id: userId,
     };
     const { data, error } = await supabase.from("shifts").insert(payload).select().single();
     if (error) { flash("Échec ajout shift: " + error.message); return; }
     setShifts(prev => [...prev, data]);
     setQuickAddDate(null);
+    flashOk("Shift ajouté");
   }
 
   async function upsertShift(form) {
@@ -133,11 +140,12 @@ export default function ShiftCtrlApp({ userEmail }) {
       if (error) { flash("Échec sauvegarde: " + error.message); return; }
       setShifts(prev => prev.map(s => s.id === editShift.id ? data : s));
     } else {
-      const { data, error } = await supabase.from("shifts").insert(payload).select().single();
+      const { data, error } = await supabase.from("shifts").insert({ ...payload, user_id: userId }).select().single();
       if (error) { flash("Échec sauvegarde: " + error.message); return; }
       setShifts(prev => [...prev, data]);
     }
     closeModal();
+    flashOk("Shift enregistré");
   }
 
   async function deleteShift(id) {
@@ -145,6 +153,7 @@ export default function ShiftCtrlApp({ userEmail }) {
     if (error) { flash("Échec suppression: " + error.message); return; }
     setShifts(prev => prev.filter(s => s.id !== id));
     closeModal();
+    flashOk("Shift supprimé");
   }
 
   // ---- sites CRUD ----
@@ -153,23 +162,27 @@ export default function ShiftCtrlApp({ userEmail }) {
       name: form.name.trim(), indemnite: Number(form.indemnite) || 0,
       day_start: form.dayStart, day_end: form.dayEnd,
       night_start: form.nightStart, night_end: form.nightEnd,
+      special_rate_enabled: !!form.specialEnabled,
+      special_rate: form.specialEnabled ? (Number(form.specialRate) || 0) : null,
     };
     if (editSite) {
       const { data, error } = await supabase.from("sites").update(payload).eq("id", editSite.id).select().single();
       if (error) { flash("Échec sauvegarde client: " + error.message); return; }
       setSites(prev => prev.map(s => s.id === editSite.id ? data : s));
     } else {
-      const { data, error } = await supabase.from("sites").insert(payload).select().single();
+      const { data, error } = await supabase.from("sites").insert({ ...payload, user_id: userId }).select().single();
       if (error) { flash("Échec création client: " + error.message); return; }
       setSites(prev => [...prev, data]);
     }
     setSiteFormOpen(false); setEditSite(null);
+    flashOk("Client enregistré");
   }
 
   async function deleteSite(id) {
     const { error } = await supabase.from("sites").delete().eq("id", id);
     if (error) { flash("Échec suppression: " + error.message); return; }
     setSites(prev => prev.filter(s => s.id !== id));
+    flashOk("Client supprimé");
   }
 
   // ---- rates ----
@@ -178,8 +191,10 @@ export default function ShiftCtrlApp({ userEmail }) {
     const uid = userData?.user?.id;
     const payload = { user_id: uid, taux_jour: next.jour, taux_nuit: next.nuit, prime: next.prime };
     const { data, error } = await supabase.from("rates").upsert(payload).select().single();
-    if (error) { flash("Échec sauvegarde taux: " + error.message); return; }
+    if (error) { flash("Échec sauvegarde taux: " + error.message); return false; }
     setRates(data);
+    flashOk("Taux enregistrés");
+    return true;
   }
 
   async function logout() {
@@ -230,9 +245,15 @@ export default function ShiftCtrlApp({ userEmail }) {
 
       {siteFormOpen && (
         <SiteModal
-          site={editSite ? { name: editSite.name, indemnite: editSite.indemnite, dayStart: toHHMM(editSite.day_start), dayEnd: toHHMM(editSite.day_end), nightStart: toHHMM(editSite.night_start), nightEnd: toHHMM(editSite.night_end) } : null}
+          site={editSite ? { name: editSite.name, indemnite: editSite.indemnite, dayStart: toHHMM(editSite.day_start), dayEnd: toHHMM(editSite.day_end), nightStart: toHHMM(editSite.night_start), nightEnd: toHHMM(editSite.night_end), specialEnabled: !!editSite.special_rate_enabled, specialRate: editSite.special_rate ?? "" } : null}
           onClose={() => { setSiteFormOpen(false); setEditSite(null); }} onSave={upsertSite}
         />
+      )}
+
+      {okMsg && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 text-sm px-4 py-2.5 rounded display tracking-wide z-50 flex items-center gap-2" style={{ background: C.elevated, border: `1px solid #2FB86B`, color: C.text }}>
+          <Check className="w-4 h-4" style={{ color: "#2FB86B" }} /> {okMsg}
+        </div>
       )}
 
       {errMsg && (
@@ -322,9 +343,15 @@ function CalendarView({ cursor, setCursor, shiftsByDay, siteById, onDayClick, on
           const key = `${y}-${pad(m+1)}-${pad(d)}`;
           const dayShifts = shiftsByDay[key] || [];
           const isToday = key === today;
+          const transportIcon = dayShifts.some(s => s.transport === "conducteur") ? Car
+            : dayShifts.some(s => s.transport === "passager") ? Users
+            : null;
           return (
             <button key={i} onClick={() => dayShifts.length ? onShiftClick(dayShifts[0]) : onDayClick(key)} className="focusable aspect-square rounded p-1.5 flex flex-col text-left relative" style={{ background: C.panel, border: isToday ? `1.5px solid ${C.red}` : `1px solid ${C.borderSoft}`, minHeight: "3rem" }}>
-              <span className="mono text-[11px]" style={{ color: C.textMid }}>{d}</span>
+              <div className="flex items-center justify-between">
+                <span className="mono text-[11px]" style={{ color: C.textMid }}>{d}</span>
+                {transportIcon && React.createElement(transportIcon, { className: "w-3 h-3", style: { color: C.textDim } })}
+              </div>
               <div className="flex-1 flex flex-col justify-end gap-1 mt-0.5">
                 {dayShifts.slice(0, 3).map(s => (
                   <div key={s.id} className="h-1.5 rounded-full" style={{ background: s.type === "nuit" ? C.red : C.amber, opacity: s.status === "annule" ? 0.3 : s.status === "prevu" ? 0.6 : 1 }} />
@@ -334,10 +361,12 @@ function CalendarView({ cursor, setCursor, shiftsByDay, siteById, onDayClick, on
           );
         })}
       </div>
-      <div className="mt-4 text-[11px] flex items-center gap-4 uppercase tracking-widest" style={{ color: C.textDim }}>
+      <div className="mt-4 text-[11px] flex items-center gap-4 uppercase tracking-widest flex-wrap" style={{ color: C.textDim }}>
         <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full inline-block" style={{ background: C.textMid }} /> Presté = plein</span>
         <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full inline-block" style={{ background: C.textMid, opacity: 0.6 }} /> Prévu</span>
         <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full inline-block" style={{ background: C.textMid, opacity: 0.3 }} /> Annulé</span>
+        <span className="flex items-center gap-1.5"><Car className="w-3 h-3" /> Conducteur</span>
+        <span className="flex items-center gap-1.5"><Users className="w-3 h-3" /> Passager</span>
       </div>
     </div>
   );
@@ -481,7 +510,12 @@ function SitesView({ sites, onEdit, onAddNew, onDelete }) {
             <button onClick={() => onEdit(s)} className="focusable flex items-center gap-3 text-left flex-1 min-w-0">
               <MapPin className="w-4 h-4 flex-shrink-0" style={{ color: C.red }} />
               <div className="min-w-0">
-                <div className="text-[15px] font-medium flex items-center gap-1.5">{s.name} <Pencil className="w-3 h-3" style={{ color: C.textDim }} /></div>
+                <div className="text-[15px] font-medium flex items-center gap-1.5">
+                  {s.name} <Pencil className="w-3 h-3" style={{ color: C.textDim }} />
+                  {s.special_rate_enabled && (
+                    <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded" style={{ background: C.redDim, color: C.red }}>★ {fmtEUR(s.special_rate)}/h</span>
+                  )}
+                </div>
                 <div className="text-xs mono mt-0.5" style={{ color: C.textDim }}>
                   <span style={{ color: C.amber }}>{toHHMM(s.day_start)}–{toHHMM(s.day_end)}</span>{" · "}
                   <span style={{ color: C.red }}>{toHHMM(s.night_start)}–{toHHMM(s.night_end)}</span>{" · "}{fmtEUR(s.indemnite)}
@@ -501,7 +535,7 @@ function SitesView({ sites, onEdit, onAddNew, onDelete }) {
 }
 
 function SiteModal({ site, onClose, onSave }) {
-  const [form, setForm] = useState(() => site || { name: "", indemnite: "", dayStart: "08:00", dayEnd: "16:00", nightStart: "22:00", nightEnd: "06:00" });
+  const [form, setForm] = useState(() => site || { name: "", indemnite: "", dayStart: "08:00", dayEnd: "16:00", nightStart: "22:00", nightEnd: "06:00", specialEnabled: false, specialRate: "" });
   function submit(e) { e.preventDefault(); if (!form.name.trim()) return; onSave(form); }
   return (
     <div className="fixed inset-0 z-40 flex items-end sm:items-center justify-center" style={{ background: "rgba(0,0,0,0.65)" }} onClick={onClose}>
@@ -531,6 +565,28 @@ function SiteModal({ site, onClose, onSave }) {
               <Field label="Fin"><input type="time" value={form.nightEnd} onChange={e => setForm({ ...form, nightEnd: e.target.value })} className="w-full rounded-lg px-3.5 py-3 text-[15px] mono" style={{ background: C.bg, border: `1px solid ${C.border}`, color: C.text }} /></Field>
             </div>
           </div>
+
+          <div className="pt-1" style={{ borderTop: `1px solid ${C.borderSoft}` }}>
+            <button
+              type="button"
+              onClick={() => setForm({ ...form, specialEnabled: !form.specialEnabled })}
+              className="focusable w-full mt-3.5 flex items-center justify-between px-3.5 py-3 rounded-lg"
+              style={{ background: form.specialEnabled ? C.redDim : C.bg, border: `1px solid ${form.specialEnabled ? C.red : C.border}` }}
+            >
+              <span className="text-[13px] font-medium flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full inline-block" style={{ background: form.specialEnabled ? C.red : C.textDim }} />
+                Taux horaire spécial
+              </span>
+              <span className="text-[11px] uppercase tracking-wider" style={{ color: form.specialEnabled ? C.red : C.textDim }}>{form.specialEnabled ? "Activé" : "Désactivé"}</span>
+            </button>
+            {form.specialEnabled && (
+              <div className="mt-2.5">
+                <Field label="Taux horaire spécial (€/h — remplace jour et nuit pour ce client)">
+                  <input type="number" min="0" step="0.1" value={form.specialRate} onChange={e => setForm({ ...form, specialRate: e.target.value })} placeholder="0" className="w-full rounded-lg px-3.5 py-3 text-[15px] mono" style={{ background: C.bg, border: `1px solid ${C.red}`, color: C.text }} />
+                </Field>
+              </div>
+            )}
+          </div>
         </div>
         <button type="submit" className="focusable w-full mt-5 py-3.5 rounded-lg display text-[13px] uppercase tracking-wider font-medium" style={{ background: C.red, color: "#FFFFFF" }}>Enregistrer</button>
       </form>
@@ -540,7 +596,20 @@ function SiteModal({ site, onClose, onSave }) {
 
 function SettingsView({ rates, onSave }) {
   const [local, setLocal] = useState({ jour: rates.taux_jour, nuit: rates.taux_nuit, prime: rates.prime });
+  const [saving, setSaving] = useState(false);
+  const [justSaved, setJustSaved] = useState(false);
   useEffect(() => setLocal({ jour: rates.taux_jour, nuit: rates.taux_nuit, prime: rates.prime }), [rates]);
+
+  async function handleSave() {
+    setSaving(true);
+    const ok = await onSave({ jour: Number(local.jour) || 0, nuit: Number(local.nuit) || 0, prime: Number(local.prime) || 0 });
+    setSaving(false);
+    if (ok) {
+      setJustSaved(true);
+      setTimeout(() => setJustSaved(false), 1600);
+    }
+  }
+
   return (
     <div>
       <div className="display text-[13px] uppercase tracking-widest mb-3" style={{ color: C.textDim }}>Taux & primes</div>
@@ -548,7 +617,14 @@ function SettingsView({ rates, onSave }) {
         <Field label="Taux horaire net — jour (€/h)"><input type="number" min="0" step="0.1" value={local.jour} onChange={e => setLocal({ ...local, jour: e.target.value })} className="w-full rounded-lg px-3.5 py-3 text-[15px] mono" style={{ background: C.bg, border: `1px solid ${C.border}`, color: C.text }} /></Field>
         <Field label="Taux horaire net — nuit (€/h)"><input type="number" min="0" step="0.1" value={local.nuit} onChange={e => setLocal({ ...local, nuit: e.target.value })} className="w-full rounded-lg px-3.5 py-3 text-[15px] mono" style={{ background: C.bg, border: `1px solid ${C.border}`, color: C.text }} /></Field>
         <Field label="Prime par jour presté (€)"><input type="number" min="0" step="0.5" value={local.prime} onChange={e => setLocal({ ...local, prime: e.target.value })} className="w-full rounded-lg px-3.5 py-3 text-[15px] mono" style={{ background: C.bg, border: `1px solid ${C.border}`, color: C.text }} /></Field>
-        <button onClick={() => onSave({ jour: Number(local.jour) || 0, nuit: Number(local.nuit) || 0, prime: Number(local.prime) || 0 })} className="focusable mt-1 py-3.5 rounded-lg display text-[13px] uppercase tracking-wider font-medium" style={{ background: C.red, color: "#FFFFFF" }}>Enregistrer</button>
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="focusable mt-1 py-3.5 rounded-lg display text-[13px] uppercase tracking-wider font-medium flex items-center justify-center gap-2"
+          style={{ background: justSaved ? "#2FB86B" : C.red, color: "#FFFFFF", opacity: saving ? 0.7 : 1 }}
+        >
+          {justSaved ? (<><Check className="w-4 h-4" /> Enregistré</>) : saving ? "Enregistrement…" : "Enregistrer"}
+        </button>
       </div>
     </div>
   );
