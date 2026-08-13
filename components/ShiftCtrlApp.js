@@ -16,8 +16,8 @@ const TRANSPORT = {
 const C = {
   bg: "#121317", panel: "#1B1D22", panelAlt: "#202228", elevated: "#26282F",
   border: "#3A3C46", borderSoft: "#2A2C34",
-  red: "#EA2630", redDim: "rgba(234,38,48,0.16)",
-  amber: "#F7B500", amberDim: "rgba(247,181,0,0.16)",
+  red: "#E4000F", redDim: "rgba(228,0,15,0.28)",
+  amber: "#FFD500", amberDim: "rgba(255,213,0,0.28)",
   text: "#F8F8F7", textMid: "#C7C9D1", textDim: "#9497A3",
 };
 
@@ -430,8 +430,8 @@ function CalendarView({ cursor, setCursor, shiftsByDay, notesByDay, siteById, on
                   >
                     {d}
                   </span>
-                  <button onClick={() => onDayClick(key)} className="focusable rounded flex-shrink-0" style={{ color: C.textDim }} title="Ajouter">
-                    <Plus className="w-3.5 h-3.5" />
+                  <button onClick={() => onDayClick(key)} className="focusable rounded flex-shrink-0 flex items-center justify-center" style={{ color: C.text, background: C.elevated, width: "22px", height: "22px" }} title="Ajouter">
+                    <Plus className="w-4 h-4" />
                   </button>
                 </div>
                 <div className="flex flex-col gap-0.5">
