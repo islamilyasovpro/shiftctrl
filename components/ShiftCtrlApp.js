@@ -400,8 +400,8 @@ function CalendarView({ cursor, setCursor, shiftsByDay, notesByDay, siteById, on
       <div className="flex items-center gap-4 mb-2 text-xs uppercase tracking-widest flex-wrap" style={{ color: C.textDim }}>
         <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full inline-block" style={{ background: C.amber }} /> Jour</span>
         <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full inline-block" style={{ background: C.red }} /> Nuit</span>
-        <span className="flex items-center gap-1.5"><Car className="w-3.5 h-3.5" /> Conducteur</span>
-        <span className="flex items-center gap-1.5"><Users className="w-3.5 h-3.5" /> Passager</span>
+        <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full inline-block" style={{ background: "#5EC8F0" }} /> Conducteur</span>
+        <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full inline-block" style={{ background: "#B98CE8" }} /> Passager</span>
         <span className="flex items-center gap-1.5"><StickyNote className="w-3.5 h-3.5" /> Note</span>
       </div>
 
@@ -420,37 +420,37 @@ function CalendarView({ cursor, setCursor, shiftsByDay, notesByDay, siteById, on
             const dayNotes = notesByDay[key] || [];
             const isToday = key === today;
             return (
-              <div key={i} className="p-1 flex flex-col gap-1" style={{ borderRight: `1px solid ${C.borderSoft}`, borderBottom: `1px solid ${C.borderSoft}`, minHeight: "150px" }}>
-                <div className="flex items-center justify-between">
+              <div key={i} className="p-0.5 flex flex-col gap-0.5" style={{ borderRight: `1px solid ${C.borderSoft}`, borderBottom: `1px solid ${C.borderSoft}`, minHeight: "118px" }}>
+                <div className="flex items-center justify-between px-0.5 pt-0.5">
                   <span
-                    className="mono text-[15px] font-bold flex items-center justify-center"
+                    className="mono text-[13px] font-bold flex items-center justify-center flex-shrink-0"
                     style={{
                       color: isToday ? "#FFFFFF" : C.textMid,
                       background: isToday ? C.red : "transparent",
-                      width: "22px", height: "22px", borderRadius: "6px",
+                      width: "19px", height: "19px", borderRadius: "5px",
                     }}
                   >
                     {d}
                   </span>
-                  <button onClick={() => onDayClick(key)} className="focusable rounded" style={{ color: C.textDim }} title="Ajouter">
-                    <Plus className="w-4 h-4" />
+                  <button onClick={() => onDayClick(key)} className="focusable rounded flex-shrink-0" style={{ color: C.textDim }} title="Ajouter">
+                    <Plus className="w-3.5 h-3.5" />
                   </button>
                 </div>
-                <div className="flex flex-col gap-1">
+                <div className="flex flex-col gap-0.5">
                   {dayShifts.map(s => {
                     const site = siteById[s.site_id];
-                    const TransportIcon = s.transport === "conducteur" ? Car : s.transport === "passager" ? Users : null;
+                    const dotColor = s.transport === "conducteur" ? "#5EC8F0" : s.transport === "passager" ? "#B98CE8" : null;
                     return (
                       <button
                         key={s.id}
                         onClick={() => onShiftClick(s)}
-                        className="focusable w-full text-left px-1.5 py-1 rounded flex items-center gap-1 min-w-0"
+                        className="focusable w-full text-left px-1 py-0.5 rounded-sm flex items-center gap-0.5"
                         style={{ background: s.type === "nuit" ? C.redDim : C.amberDim }}
                       >
-                        {TransportIcon && <TransportIcon className="w-3.5 h-3.5 flex-shrink-0" style={{ color: C.textDim }} />}
-                        <span className="text-[13px] leading-tight truncate font-semibold" style={{ color: C.text }}>
+                        <span className="text-[11.5px] leading-tight truncate font-semibold flex-1 min-w-0" style={{ color: C.text }}>
                           {site ? site.name : "Perso"}
                         </span>
+                        {dotColor && <span className="rounded-full flex-shrink-0" style={{ width: "5px", height: "5px", background: dotColor }} />}
                       </button>
                     );
                   })}
@@ -458,10 +458,10 @@ function CalendarView({ cursor, setCursor, shiftsByDay, notesByDay, siteById, on
                     <button
                       key={n.id}
                       onClick={() => onNoteClick(n)}
-                      className="focusable w-full text-left px-1.5 py-1 rounded truncate"
+                      className="focusable w-full text-left px-1 py-0.5 rounded-sm"
                       style={{ background: C.elevated }}
                     >
-                      <span className="text-[13px] leading-tight truncate" style={{ color: C.textMid }}>{n.text}</span>
+                      <span className="text-[11.5px] leading-tight truncate block" style={{ color: C.textMid }}>{n.text}</span>
                     </button>
                   ))}
                 </div>
