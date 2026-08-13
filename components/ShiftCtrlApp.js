@@ -442,9 +442,9 @@ function CalendarView({ cursor, setCursor, shiftsByDay, notesByDay, siteById, on
                         key={s.id}
                         onClick={() => onShiftClick(s)}
                         className="focusable w-full text-left px-0.5 py-0.5 rounded-sm block"
-                        style={{ background: s.type === "nuit" ? C.redDim : C.amberDim }}
+                        style={{ background: s.type === "nuit" ? C.red : C.amber }}
                       >
-                        <span className="text-[11px] leading-tight truncate block font-medium" style={{ color: C.text }}>
+                        <span className="text-[11px] leading-tight truncate block font-bold" style={{ color: "#0F0F10" }}>
                           {site ? site.name : "Perso"}
                         </span>
                       </button>
