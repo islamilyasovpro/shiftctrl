@@ -400,8 +400,6 @@ function CalendarView({ cursor, setCursor, shiftsByDay, notesByDay, siteById, on
       <div className="flex items-center gap-4 mb-2 text-xs uppercase tracking-widest flex-wrap" style={{ color: C.textDim }}>
         <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full inline-block" style={{ background: C.amber }} /> Jour</span>
         <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full inline-block" style={{ background: C.red }} /> Nuit</span>
-        <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full inline-block" style={{ background: "#5EC8F0" }} /> Conducteur</span>
-        <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full inline-block" style={{ background: "#B98CE8" }} /> Passager</span>
         <span className="flex items-center gap-1.5"><StickyNote className="w-3.5 h-3.5" /> Note</span>
       </div>
 
@@ -439,18 +437,16 @@ function CalendarView({ cursor, setCursor, shiftsByDay, notesByDay, siteById, on
                 <div className="flex flex-col gap-0.5">
                   {dayShifts.map(s => {
                     const site = siteById[s.site_id];
-                    const dotColor = s.transport === "conducteur" ? "#5EC8F0" : s.transport === "passager" ? "#B98CE8" : null;
                     return (
                       <button
                         key={s.id}
                         onClick={() => onShiftClick(s)}
-                        className="focusable w-full text-left px-1 py-0.5 rounded-sm flex items-center gap-0.5"
+                        className="focusable w-full text-left px-0.5 py-0.5 rounded-sm block"
                         style={{ background: s.type === "nuit" ? C.redDim : C.amberDim }}
                       >
-                        <span className="text-[11.5px] leading-tight truncate font-semibold flex-1 min-w-0" style={{ color: C.text }}>
+                        <span className="text-[11px] leading-tight truncate block font-medium" style={{ color: C.text }}>
                           {site ? site.name : "Perso"}
                         </span>
-                        {dotColor && <span className="rounded-full flex-shrink-0" style={{ width: "5px", height: "5px", background: dotColor }} />}
                       </button>
                     );
                   })}
