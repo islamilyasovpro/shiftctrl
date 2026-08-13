@@ -412,7 +412,7 @@ function CalendarView({ cursor, setCursor, shiftsByDay, notesByDay, siteById, on
         </div>
         <div className="grid grid-cols-7" style={{ borderLeft: `1px solid ${C.borderSoft}` }}>
           {cells.map((d, i) => {
-            if (d === null) return <div key={i} style={{ borderRight: `1px solid ${C.borderSoft}`, borderBottom: `1px solid ${C.borderSoft}`, minHeight: "150px" }} />;
+            if (d === null) return <div key={i} style={{ borderRight: `1px solid ${C.borderSoft}`, borderBottom: `1px solid ${C.borderSoft}`, minHeight: "118px" }} />;
             const key = `${y}-${pad(m+1)}-${pad(d)}`;
             const dayShifts = shiftsByDay[key] || [];
             const dayNotes = notesByDay[key] || [];
