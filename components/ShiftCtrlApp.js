@@ -397,63 +397,78 @@ function CalendarView({ cursor, setCursor, shiftsByDay, notesByDay, siteById, on
           Ajoute d'abord tes clients dans l'onglet <b>Clients</b> pour pouvoir les placer d'un tap sur le calendrier.
         </div>
       )}
-      <div className="flex items-center gap-4 mb-3 text-xs uppercase tracking-widest flex-wrap" style={{ color: C.textDim }}>
+      <div className="flex items-center gap-4 mb-2 text-xs uppercase tracking-widest flex-wrap" style={{ color: C.textDim }}>
         <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full inline-block" style={{ background: C.amber }} /> Jour</span>
         <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full inline-block" style={{ background: C.red }} /> Nuit</span>
         <span className="flex items-center gap-1.5"><Car className="w-3.5 h-3.5" /> Conducteur</span>
         <span className="flex items-center gap-1.5"><Users className="w-3.5 h-3.5" /> Passager</span>
         <span className="flex items-center gap-1.5"><StickyNote className="w-3.5 h-3.5" /> Note</span>
       </div>
-      <div className="grid grid-cols-7 gap-1 mb-1">
-        {DAYS.map((d, i) => <div key={i} className="text-center text-xs uppercase tracking-widest py-1 font-medium" style={{ color: C.textDim }}>{d}</div>)}
-      </div>
-      <div className="grid grid-cols-7 gap-1">
-        {cells.map((d, i) => {
-          if (d === null) return <div key={i} />;
-          const key = `${y}-${pad(m+1)}-${pad(d)}`;
-          const dayShifts = shiftsByDay[key] || [];
-          const dayNotes = notesByDay[key] || [];
-          const isToday = key === today;
-          return (
-            <div key={i} className="rounded-md p-1 flex flex-col gap-1" style={{ background: C.panel, border: isToday ? `2px solid ${C.red}` : `1px solid ${C.borderSoft}`, minHeight: "160px" }}>
-              <div className="flex items-center justify-between">
-                <span className="mono text-base font-bold" style={{ color: isToday ? C.red : C.textMid }}>{d}</span>
-                <button onClick={() => onDayClick(key)} className="focusable rounded" style={{ color: C.textDim }} title="Ajouter">
-                  <Plus className="w-4 h-4" />
-                </button>
-              </div>
-              <div className="flex flex-col gap-1">
-                {dayShifts.map(s => {
-                  const site = siteById[s.site_id];
-                  const TransportIcon = s.transport === "conducteur" ? Car : s.transport === "passager" ? Users : null;
-                  return (
-                    <button
-                      key={s.id}
-                      onClick={() => onShiftClick(s)}
-                      className="focusable w-full text-left px-1 py-1.5 rounded flex items-center gap-1 min-w-0"
-                      style={{ background: s.type === "nuit" ? C.redDim : C.amberDim }}
-                    >
-                      {TransportIcon && <TransportIcon className="w-3.5 h-3.5 flex-shrink-0" style={{ color: C.textDim }} />}
-                      <span className="text-[13px] leading-tight truncate font-semibold" style={{ color: C.text }}>
-                        {site ? site.name : "Perso"}
-                      </span>
-                    </button>
-                  );
-                })}
-                {dayNotes.map(n => (
-                  <button
-                    key={n.id}
-                    onClick={() => onNoteClick(n)}
-                    className="focusable w-full text-left px-1 py-1.5 rounded truncate"
-                    style={{ background: C.elevated, border: `1px solid ${C.border}` }}
+
+      {/* full-bleed edge-to-edge grid, like the iOS Calendar app */}
+      <div className="-mx-2">
+        <div className="grid grid-cols-7" style={{ borderTop: `1px solid ${C.borderSoft}`, borderLeft: `1px solid ${C.borderSoft}` }}>
+          {DAYS.map((d, i) => (
+            <div key={i} className="text-center text-[10px] uppercase tracking-widest py-1.5" style={{ color: C.textDim, borderRight: `1px solid ${C.borderSoft}`, borderBottom: `1px solid ${C.borderSoft}` }}>{d}</div>
+          ))}
+        </div>
+        <div className="grid grid-cols-7" style={{ borderLeft: `1px solid ${C.borderSoft}` }}>
+          {cells.map((d, i) => {
+            if (d === null) return <div key={i} style={{ borderRight: `1px solid ${C.borderSoft}`, borderBottom: `1px solid ${C.borderSoft}`, minHeight: "150px" }} />;
+            const key = `${y}-${pad(m+1)}-${pad(d)}`;
+            const dayShifts = shiftsByDay[key] || [];
+            const dayNotes = notesByDay[key] || [];
+            const isToday = key === today;
+            return (
+              <div key={i} className="p-1 flex flex-col gap-1" style={{ borderRight: `1px solid ${C.borderSoft}`, borderBottom: `1px solid ${C.borderSoft}`, minHeight: "150px" }}>
+                <div className="flex items-center justify-between">
+                  <span
+                    className="mono text-[15px] font-bold flex items-center justify-center"
+                    style={{
+                      color: isToday ? "#FFFFFF" : C.textMid,
+                      background: isToday ? C.red : "transparent",
+                      width: "22px", height: "22px", borderRadius: "6px",
+                    }}
                   >
-                    <span className="text-[13px] leading-tight truncate" style={{ color: C.textMid }}>{n.text}</span>
+                    {d}
+                  </span>
+                  <button onClick={() => onDayClick(key)} className="focusable rounded" style={{ color: C.textDim }} title="Ajouter">
+                    <Plus className="w-4 h-4" />
                   </button>
-                ))}
+                </div>
+                <div className="flex flex-col gap-1">
+                  {dayShifts.map(s => {
+                    const site = siteById[s.site_id];
+                    const TransportIcon = s.transport === "conducteur" ? Car : s.transport === "passager" ? Users : null;
+                    return (
+                      <button
+                        key={s.id}
+                        onClick={() => onShiftClick(s)}
+                        className="focusable w-full text-left px-1.5 py-1 rounded flex items-center gap-1 min-w-0"
+                        style={{ background: s.type === "nuit" ? C.redDim : C.amberDim }}
+                      >
+                        {TransportIcon && <TransportIcon className="w-3.5 h-3.5 flex-shrink-0" style={{ color: C.textDim }} />}
+                        <span className="text-[13px] leading-tight truncate font-semibold" style={{ color: C.text }}>
+                          {site ? site.name : "Perso"}
+                        </span>
+                      </button>
+                    );
+                  })}
+                  {dayNotes.map(n => (
+                    <button
+                      key={n.id}
+                      onClick={() => onNoteClick(n)}
+                      className="focusable w-full text-left px-1.5 py-1 rounded truncate"
+                      style={{ background: C.elevated }}
+                    >
+                      <span className="text-[13px] leading-tight truncate" style={{ color: C.textMid }}>{n.text}</span>
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
     </div>
   );
