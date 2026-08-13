@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 const MONTHS = ["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"];
 const DAYS = ["L","M","M","J","V","S","D"];
 
-const STATUS = { preste: { label: "Presté" }, prevu: { label: "Prévu" }, annule: { label: "Annulé" } };
+const STATUS = {};
 const TRANSPORT = {
   conducteur: { label: "Conducteur", icon: Car },
   passager: { label: "Passager", icon: Users },
@@ -115,10 +115,10 @@ export default function ShiftCtrlApp({ userEmail }) {
   const monthSummary = useMemo(() => {
     let acquis = { base: 0, prime: 0, deplacement: 0, hj: 0, hn: 0, total: 0 };
     let prevu = { base: 0, prime: 0, deplacement: 0, hj: 0, hn: 0, total: 0 };
+    const todayKey = dateKey(new Date());
     for (const s of monthShifts) {
-      if (s.status === "annule") continue;
       const p = computeShiftPay(s);
-      const bucket = s.status === "preste" ? acquis : prevu;
+      const bucket = s.date <= todayKey ? acquis : prevu;
       bucket.base += p.base; bucket.prime += p.prime; bucket.deplacement += p.deplacement; bucket.total += p.total;
       if (s.type === "nuit") bucket.hn += p.hours; else bucket.hj += p.hours;
     }
@@ -139,7 +139,7 @@ export default function ShiftCtrlApp({ userEmail }) {
       date,
       start_time: type === "nuit" ? (site.night_start || "22:00") : (site.day_start || "08:00"),
       end_time: type === "nuit" ? (site.night_end || "06:00") : (site.day_end || "16:00"),
-      site_id: site.id, type, transport, status: "prevu", user_id: userId,
+      site_id: site.id, type, transport, user_id: userId,
     };
     const { data, error } = await supabase.from("shifts").insert(payload).select().single();
     if (error) { flash("Échec ajout shift: " + error.message); return; }
@@ -151,7 +151,7 @@ export default function ShiftCtrlApp({ userEmail }) {
   async function upsertShift(form) {
     const payload = {
       date: form.date, start_time: form.start, end_time: form.end,
-      site_id: form.siteId || null, type: form.type, transport: form.transport, status: form.status,
+      site_id: form.siteId || null, type: form.type, transport: form.transport,
       special_enabled: !!form.specialEnabled,
       special_rate: form.specialEnabled ? (Number(form.specialRate) || 0) : null,
       special_prime: form.specialEnabled ? (Number(form.specialPrime) || 0) : null,
@@ -293,7 +293,7 @@ export default function ShiftCtrlApp({ userEmail }) {
       {modalDate && (
         <ShiftModal
           date={modalDate}
-          shift={editShift ? { date: editShift.date, start: toHHMM(editShift.start_time), end: toHHMM(editShift.end_time), siteId: editShift.site_id || "", type: editShift.type, transport: editShift.transport, status: editShift.status, specialEnabled: !!editShift.special_enabled, specialRate: editShift.special_rate ?? "", specialPrime: editShift.special_prime ?? "", specialIndemnite: editShift.special_indemnite ?? "" } : null}
+          shift={editShift ? { date: editShift.date, start: toHHMM(editShift.start_time), end: toHHMM(editShift.end_time), siteId: editShift.site_id || "", type: editShift.type, transport: editShift.transport, specialEnabled: !!editShift.special_enabled, specialRate: editShift.special_rate ?? "", specialPrime: editShift.special_prime ?? "", specialIndemnite: editShift.special_indemnite ?? "" } : null}
           sites={sites} onClose={closeModal} onSave={upsertShift}
           onDelete={editShift ? () => deleteShift(editShift.id) : null}
         />
@@ -404,10 +404,10 @@ function CalendarView({ cursor, setCursor, shiftsByDay, notesByDay, siteById, on
         <span className="flex items-center gap-1.5"><Users className="w-3.5 h-3.5" /> Passager</span>
         <span className="flex items-center gap-1.5"><StickyNote className="w-3.5 h-3.5" /> Note</span>
       </div>
-      <div className="grid grid-cols-7 gap-1 mb-1">
-        {DAYS.map((d, i) => <div key={i} className="text-center text-[10px] uppercase tracking-widest py-1" style={{ color: C.textDim }}>{d}</div>)}
+      <div className="grid grid-cols-7 gap-1.5 mb-1">
+        {DAYS.map((d, i) => <div key={i} className="text-center text-xs uppercase tracking-widest py-1 font-medium" style={{ color: C.textDim }}>{d}</div>)}
       </div>
-      <div className="grid grid-cols-7 gap-1">
+      <div className="grid grid-cols-7 gap-1.5">
         {cells.map((d, i) => {
           if (d === null) return <div key={i} />;
           const key = `${y}-${pad(m+1)}-${pad(d)}`;
@@ -415,14 +415,14 @@ function CalendarView({ cursor, setCursor, shiftsByDay, notesByDay, siteById, on
           const dayNotes = notesByDay[key] || [];
           const isToday = key === today;
           return (
-            <div key={i} className="rounded p-1 flex flex-col gap-0.5" style={{ background: C.panel, border: isToday ? `1.5px solid ${C.red}` : `1px solid ${C.borderSoft}`, minHeight: "64px" }}>
+            <div key={i} className="rounded-md p-1.5 flex flex-col gap-1" style={{ background: C.panel, border: isToday ? `2px solid ${C.red}` : `1px solid ${C.borderSoft}`, minHeight: "94px" }}>
               <div className="flex items-center justify-between">
-                <span className="mono text-[10px]" style={{ color: isToday ? C.red : C.textMid }}>{d}</span>
+                <span className="mono text-[13px] font-semibold" style={{ color: isToday ? C.red : C.textMid }}>{d}</span>
                 <button onClick={() => onDayClick(key)} className="focusable rounded" style={{ color: C.textDim }} title="Ajouter">
-                  <Plus className="w-3 h-3" />
+                  <Plus className="w-4 h-4" />
                 </button>
               </div>
-              <div className="flex flex-col gap-0.5">
+              <div className="flex flex-col gap-1">
                 {dayShifts.map(s => {
                   const site = siteById[s.site_id];
                   const TransportIcon = s.transport === "conducteur" ? Car : s.transport === "passager" ? Users : null;
@@ -430,14 +430,11 @@ function CalendarView({ cursor, setCursor, shiftsByDay, notesByDay, siteById, on
                     <button
                       key={s.id}
                       onClick={() => onShiftClick(s)}
-                      className="focusable w-full text-left px-1 py-0.5 rounded flex items-center gap-0.5 min-w-0"
-                      style={{
-                        background: s.type === "nuit" ? C.redDim : C.amberDim,
-                        opacity: s.status === "annule" ? 0.45 : s.status === "prevu" ? 0.8 : 1,
-                      }}
+                      className="focusable w-full text-left px-1.5 py-1 rounded flex items-center gap-1 min-w-0"
+                      style={{ background: s.type === "nuit" ? C.redDim : C.amberDim }}
                     >
-                      {TransportIcon && <TransportIcon className="w-2 h-2 flex-shrink-0" style={{ color: C.textDim }} />}
-                      <span className="text-[9.5px] leading-tight truncate" style={{ color: C.text, textDecoration: s.status === "annule" ? "line-through" : "none" }}>
+                      {TransportIcon && <TransportIcon className="w-3 h-3 flex-shrink-0" style={{ color: C.textDim }} />}
+                      <span className="text-[11.5px] leading-tight truncate font-medium" style={{ color: C.text }}>
                         {site ? site.name : "Perso"}
                       </span>
                     </button>
@@ -447,21 +444,16 @@ function CalendarView({ cursor, setCursor, shiftsByDay, notesByDay, siteById, on
                   <button
                     key={n.id}
                     onClick={() => onNoteClick(n)}
-                    className="focusable w-full text-left px-1 py-0.5 rounded truncate"
+                    className="focusable w-full text-left px-1.5 py-1 rounded truncate"
                     style={{ background: C.elevated, border: `1px solid ${C.border}` }}
                   >
-                    <span className="text-[9.5px] leading-tight truncate" style={{ color: C.textMid }}>{n.text}</span>
+                    <span className="text-[11.5px] leading-tight truncate" style={{ color: C.textMid }}>{n.text}</span>
                   </button>
                 ))}
               </div>
             </div>
           );
         })}
-      </div>
-      <div className="mt-4 text-[11px] flex items-center gap-4 uppercase tracking-widest flex-wrap" style={{ color: C.textDim }}>
-        <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full inline-block" style={{ background: C.textMid }} /> Presté = plein</span>
-        <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full inline-block" style={{ background: C.textMid, opacity: 0.8 }} /> Prévu</span>
-        <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full inline-block" style={{ background: C.textMid, opacity: 0.45 }} /> Annulé (barré)</span>
       </div>
     </div>
   );
@@ -589,7 +581,7 @@ function SalaryView({ cursor, setCursor, summary, monthShifts, siteById }) {
                 <span style={{ color: C.textMid }}>{toHHMM(s.start_time)}–{toHHMM(s.end_time)}</span>
                 {site && <span className="text-xs" style={{ color: C.textDim }}>· {site.name}</span>}
               </div>
-              <span className="text-[11px] uppercase tracking-wider" style={{ color: C.textDim }}>{STATUS[s.status]?.label}</span>
+              <span className="text-[11px] uppercase tracking-wider" style={{ color: C.textDim }}>{s.date <= dateKey(new Date()) ? "Presté" : "Prévu"}</span>
             </div>
           );
         })}
@@ -759,7 +751,7 @@ function Field({ label, children }) {
 }
 
 function ShiftModal({ date, shift, sites, onClose, onSave, onDelete }) {
-  const [form, setForm] = useState(() => shift || { date, start: "08:00", end: "16:00", siteId: sites[0]?.id || "", type: "jour", transport: "aucun", status: "prevu", specialEnabled: false, specialRate: "", specialPrime: "", specialIndemnite: "" });
+  const [form, setForm] = useState(() => shift || { date, start: "08:00", end: "16:00", siteId: sites[0]?.id || "", type: "jour", transport: "aucun", specialEnabled: false, specialRate: "", specialPrime: "", specialIndemnite: "" });
   function submit(e) { e.preventDefault(); onSave(form); }
   return (
     <div className="fixed inset-0 z-30 flex items-end sm:items-center justify-center" style={{ background: "rgba(0,0,0,0.65)" }} onClick={onClose}>
@@ -801,11 +793,6 @@ function ShiftModal({ date, shift, sites, onClose, onSave, onDelete }) {
               })}
             </div>
           </div>
-          <Field label="Statut">
-            <select value={form.status} onChange={e => setForm({ ...form, status: e.target.value })} className="w-full rounded-lg px-3.5 py-3 text-[15px]" style={{ background: C.bg, border: `1px solid ${C.border}`, color: C.text }}>
-              {Object.entries(STATUS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-            </select>
-          </Field>
 
           <div className="pt-1" style={{ borderTop: `1px solid ${C.borderSoft}` }}>
             <button
