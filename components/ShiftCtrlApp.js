@@ -418,8 +418,8 @@ function CalendarView({ cursor, setCursor, shiftsByDay, notesByDay, siteById, on
             const dayNotes = notesByDay[key] || [];
             const isToday = key === today;
             return (
-              <div key={i} className="p-0.5 flex flex-col gap-0.5" style={{ borderRight: `1px solid ${C.borderSoft}`, borderBottom: `1px solid ${C.borderSoft}`, minHeight: "118px" }}>
-                <div className="flex items-center justify-between px-0.5 pt-0.5">
+              <div key={i} className="flex flex-col gap-px" style={{ borderRight: `1px solid ${C.borderSoft}`, borderBottom: `1px solid ${C.borderSoft}`, minHeight: "118px" }}>
+                <div className="flex items-center justify-between px-0.5 pt-0.5 pb-0.5">
                   <span
                     className="mono text-[13px] font-bold flex items-center justify-center flex-shrink-0"
                     style={{
@@ -434,17 +434,17 @@ function CalendarView({ cursor, setCursor, shiftsByDay, notesByDay, siteById, on
                     <Plus className="w-4 h-4" />
                   </button>
                 </div>
-                <div className="flex flex-col gap-0.5">
+                <div className="flex flex-col gap-px">
                   {dayShifts.map(s => {
                     const site = siteById[s.site_id];
                     return (
                       <button
                         key={s.id}
                         onClick={() => onShiftClick(s)}
-                        className="focusable w-full text-left px-0.5 py-0.5 rounded-sm block"
+                        className="focusable w-full text-left py-0.5 rounded-sm block"
                         style={{ background: s.type === "nuit" ? C.red : C.amber }}
                       >
-                        <span className="text-[11px] leading-tight truncate block font-bold" style={{ color: "#0F0F10" }}>
+                        <span className="text-[11px] leading-tight truncate block font-semibold px-0.5" style={{ color: "#0F0F10" }}>
                           {site ? site.name : "Perso"}
                         </span>
                       </button>
@@ -454,10 +454,10 @@ function CalendarView({ cursor, setCursor, shiftsByDay, notesByDay, siteById, on
                     <button
                       key={n.id}
                       onClick={() => onNoteClick(n)}
-                      className="focusable w-full text-left px-1 py-0.5 rounded-sm"
+                      className="focusable w-full text-left py-0.5 rounded-sm block"
                       style={{ background: C.elevated }}
                     >
-                      <span className="text-[11.5px] leading-tight truncate block" style={{ color: C.textMid }}>{n.text}</span>
+                      <span className="text-[11px] leading-tight truncate block px-0.5" style={{ color: C.textMid }}>{n.text}</span>
                     </button>
                   ))}
                 </div>
